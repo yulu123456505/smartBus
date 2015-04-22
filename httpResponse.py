@@ -19,7 +19,6 @@ class MyHttpHandler(BaseHTTPRequestHandler):
         if p != None:
             for key, value in p.items():
                 r_str = r_str + "<br>" + key + "=" + value
-
         enc="UTF-8"  
         encoded = ''.join(r_str).encode(enc)  
         f = io.BytesIO()  
