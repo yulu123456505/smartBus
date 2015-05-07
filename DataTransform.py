@@ -18,7 +18,7 @@ def exeInsert(conn, cur, data): #更新语句，可执行update,insert语句
 
 def exeQuery(cur, sql): #查询语句
     cur.execute(sql)
-    return (cur)
+    return (cur.fetchall())
 
 def connClose(conn, cur): #关闭所有连接
     cur.close()
@@ -34,8 +34,17 @@ def saveAllData(allData):
     else:
         print("it occurs problems when insert ", allData, "into database")
         return 0
+def readLatestData():
+    conn,cur =connDB()
+    sql = "select * from rawdata order by idRawData desc limit 1"
+    r = exeQuery(cur,sql)
+    connClose(conn,cur)
+    return r[0]
+
 
 if __name__=='__main__':
-    data = ('xiaomi', '20150415',1.23434245,1.45245,1.245, 1.2452,1.245252,1.2452, 1.0,1.0,1.0, 1.0,1.0,1.0, 1.0,1.0, 1.0,1.0, 1.0,1.0,1.0)
+    data = ('xiaomi', '20150415',1.23434245,1.45245,1.245, 1.2452,1.245252,1.2452, 1.0,1.0,1.0, 1.0,1.0,1.0, 1.0,1.0, 1.0,1.0, 2.0,2.0,2.0)
     sta = saveAllData(data)
+    #data = readLatestData()
+    #print(data)
 

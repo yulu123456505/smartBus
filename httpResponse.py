@@ -1,4 +1,5 @@
-from http.server import HTTPServer,BaseHTTPRequestHandler  
+from http.server import HTTPServer,BaseHTTPRequestHandler
+from DataTransform import readLatestData
 import io,shutil
 import time
 
@@ -13,13 +14,14 @@ def path2dict(s):
 
 class MyHttpHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        r_str="Hello World"
-        r_str = r_str + time.strftime(' %Y-%m-%d %H:%M:%S')
-        p = path2dict(self.path)
-        if p != None:
-            for key, value in p.items():
-                r_str = r_str + "<br>" + key + "=" + value
-        enc="UTF-8"  
+        data = readLatestData()
+        r_str= str(data[19:22])
+        #r_str = r_str + time.strftime(' %Y-%m-%d %H:%M:%S')
+        #p = path2dict(self.path)
+        #if p != None:
+        #    for key, value in p.items():
+        #        r_str = r_str + "<br>" + key + "=" + value
+        enc="UTF-8"
         encoded = ''.join(r_str).encode(enc)  
         f = io.BytesIO()  
         f.write(encoded)  
@@ -33,9 +35,6 @@ class MyHttpHandler(BaseHTTPRequestHandler):
 httpd=HTTPServer(('127.0.0.1',8000),MyHttpHandler)
 print("Server started on 127.0.0.1,port 8000.....")
 httpd.serve_forever()
-
-
-
 
 if __name__ == '__main__':
     a='\?id=1;name=2'
