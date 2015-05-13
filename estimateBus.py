@@ -1,29 +1,23 @@
-from random import *
-from math import *
-from cluster import *
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
+from random import sample, randrange, uniform
+from math import pi, sin, cos
+from para import people_idle, people_on_bus, predicted_buses
 
 class bus(object):
-    __location = (0, 0)   #公交车的位置
-    __bus_angle = uniform(0, pi)   #公交车的角度，北偏东X度
-    __people_num = 1    #车上人的数量
-    __length = 10.2    #公交车的长度
-    __width = 2.5    #公交车的宽度
-    __seat_location = [[x*0.5, y+0.5] for x in range(-2, 3) if x !=0 for y in range(-5, 5)]    #公交车上座位的位置
-    __seat_with_passenger = []    #有乘客的座位位置
-    __passenger_location = []    #公交车上乘客的位置
-    __GPS_accuracy = 30
-    aaa = [[x*0.5, y+0.5] for x in range(-2, 3) if x !=0 for y in range(-5, 5) if y != 0]
-
-    def __init__(self, location=(randrange(1000), randrange(1000)), people_num = randrange(1, 40), bus_angle = 0):
+    def __init__(self, bus_id=1, location=(randrange(1000), randrange(1000)), bus_angle = 0):
+        self.__bus_id = bus_id
         self.__location = location
-        if people_num > 40:
-            people_num = 40
-        elif people_num < 1:
-            people_num = 1
-        self.__people_num = people_num
-        self.__seat_with_passenger = sample(self.__seat_location, self.__people_num)
+
+        self.__bus_angle = uniform(0, pi)   #公交车的角度，北偏东X度
+        self.__people_num = 0    #车上人的数量
+        self.__length = 10.2    #公交车的长度
+        self.__width = 2.5    #公交车的宽度
+        self.__seat_location = [[x*0.5, y+0.5] for x in range(-2, 3) if x !=0 for y in range(-5, 5)]    #公交车上座位的位置
+        self.__seat_idle = self.__seat_location    #空闲的座位位置
+        self.__seat_with_passenger = []    #有乘客的座位位置
+        self.__passenger_location = []    #公交车上乘客的位置
+        self.__passenger_on_this_bus = []    #在该公交车上的乘客
+        self.__GPS_accuracy = 30
+
         if bus_angle > 360:
             bus_angle = 360
         elif bus_angle < 0:
@@ -31,14 +25,64 @@ class bus(object):
         self.__bus_angle = bus_angle
         self.calculate_passenger_location()
 
+    #上车
+    def on_bus(self, people_num=0):
+        #上车的人数要小于剩余的座位数和空闲乘客的数量
+        if len(self.__seat_idle) < people_num:
+            people_num = len(self.__seat_idle)
+        if len(people_idle) < people_num:
+            people_num = len(people_idle)
+        self.__people_num = self.__people_num + people_num    #更新乘客的数量
+
+        new_on_seat = sample(self.__seat_idle, people_num)
+        list(map(lambda x: self.__seat_idle.remove(x), new_on_seat))    #新占用的座位从空闲座位中删除
+        list(map(lambda x: self.__seat_with_passenger.append(x), new_on_seat))   #新占用的座位加入已有乘客的座位中
+        new_on_people = sample(people_idle, people_num)
+        list(map(lambda x:people_idle.remove(x), new_on_people))    #新上车的人从空闲乘客中删除
+        list(map(lambda x:people_on_bus.append(x), new_on_people))    #新上车的人加入已上车的乘客中
+        self.__passenger_on_this_bus = self.__passenger_on_this_bus + new_on_people
+        for i in range(len(new_on_people)):
+            new_on_people[i].set_bus_Info(self.__bus_id, new_on_seat[i])
+
+    #下车
+    def off_bus(self, people_num=0):
+        if people_num > len(self.__seat_with_passenger):
+            people_num = len(self.__seat_with_passenger)
+        self.__people_num = self.__people_num - people_num    #更新乘客的数量
+
+        new_off_people = sample(self.__passenger_on_this_bus, people_num)
+        list(map(lambda x:people_idle.append(x), new_off_people))    #下车乘客加入空闲乘客列表
+        list(map(lambda x:people_on_bus.remove(x), new_off_people))    #下车乘客从在公交上的列表中删除
+        list(map(lambda x:self.__passenger_on_this_bus.remove(x), new_off_people))    #下车乘客从该公交上的乘客列表中删除
+        new_off_seat = [x.get_bus_Info()[1] for x in new_off_people]
+        list(map(lambda x:self.__seat_idle.append(x), new_off_seat))    #座位加入空闲座位
+        list(map(lambda x:self.__seat_with_passenger.remove(x), new_off_seat))    #从有乘客的座位中删除
+        list(map(lambda x:x.set_bus_Info(0, [0, 0]), new_off_people))    #下车乘客的公交信息设置为0，[0，0]
+        empty_bus = []
+        for i, bus in enumerate(predicted_buses):
+            for p in new_off_people:
+                if p.p_id in bus[1]:
+                    bus[1].remove(p.p_id)
+                    if not bus[1]:
+                        empty_bus.append(i)
+                        break
+        list(map(lambda x:predicted_buses.remove(predicted_buses[x]), empty_bus))
+
+    def move(self, length, angle):
+        self.__location = [self.__location+length*cos(angle), self.__location+length*sin(angle)]
+
+
     def calculate_passenger_location(self):
-        self.__passenger_location = [[x*cos(self.__bus_angle)+y*sin(self.__bus_angle), y*cos(self.__bus_angle)-x*sin(self.__bus_angle)] for x, y in self.__seat_with_passenger]
+        self.__passenger_location = [[p.p_id, [p.p_seat_location[0]*cos(self.__bus_angle)+p.p_seat_location[1]*sin(self.__bus_angle), p.p_seat_location[1]*cos(self.__bus_angle)-p.p_seat_location[0]*sin(self.__bus_angle)]] for p in self.__passenger_on_this_bus]
 
     def getGPS(self):
+        self.calculate_passenger_location()
         L = []
-        for x, y in self.__passenger_location:
+        for pid, location in self.__passenger_location:
+            x = location[0]
+            y = location[1]
             r = randrange(self.__GPS_accuracy)
             theta = uniform(0, pi)
-            L.append([self.__location[0]+x+r*sin(theta), self.__location[1]+y+r*cos(theta)])
+            L.append([pid, [self.__location[0]+x+r*sin(theta), self.__location[1]+y+r*cos(theta)]])
         return L
 
