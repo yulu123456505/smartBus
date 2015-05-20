@@ -1,6 +1,6 @@
 from random import sample, randrange, uniform
 from math import pi, sin, cos
-from para import people_idle, people_on_bus, predicted_buses
+from para import people_idle, people_on_bus, stable_buses, unstable_buses, undetermined
 
 class bus(object):
     def __init__(self, bus_id=1, location=(randrange(1000), randrange(1000)), bus_angle = 0):
@@ -38,6 +38,10 @@ class bus(object):
         list(map(lambda x: self.__seat_idle.remove(x), new_on_seat))    #新占用的座位从空闲座位中删除
         list(map(lambda x: self.__seat_with_passenger.append(x), new_on_seat))   #新占用的座位加入已有乘客的座位中
         new_on_people = sample(people_idle, people_num)
+        #输出新上车的人
+        ps = [pid.p_id for pid in new_on_people]
+        print(ps)
+
         list(map(lambda x:people_idle.remove(x), new_on_people))    #新上车的人从空闲乘客中删除
         list(map(lambda x:people_on_bus.append(x), new_on_people))    #新上车的人加入已上车的乘客中
         self.__passenger_on_this_bus = self.__passenger_on_this_bus + new_on_people
@@ -46,8 +50,8 @@ class bus(object):
 
     #下车
     def off_bus(self, people_num=0):
-        if people_num > len(self.__seat_with_passenger):
-            people_num = len(self.__seat_with_passenger)
+        if people_num >= len(self.__seat_with_passenger):
+            people_num = len(self.__seat_with_passenger)-1
         self.__people_num = self.__people_num - people_num    #更新乘客的数量
 
         new_off_people = sample(self.__passenger_on_this_bus, people_num)
@@ -58,18 +62,30 @@ class bus(object):
         list(map(lambda x:self.__seat_idle.append(x), new_off_seat))    #座位加入空闲座位
         list(map(lambda x:self.__seat_with_passenger.remove(x), new_off_seat))    #从有乘客的座位中删除
         list(map(lambda x:x.set_bus_Info(0, [0, 0]), new_off_people))    #下车乘客的公交信息设置为0，[0，0]
-        empty_bus = []
-        for i, bus in enumerate(predicted_buses):
-            for p in new_off_people:
-                if p.p_id in bus[1]:
-                    bus[1].remove(p.p_id)
-                    if not bus[1]:
-                        empty_bus.append(i)
-                        break
-        list(map(lambda x:predicted_buses.remove(predicted_buses[x]), empty_bus))
+
+        t_stable = []
+        t_unstable = []
+        for p in new_off_people:
+            for stable in stable_buses:
+                if p.p_id in stable.people:
+                    stable.people.remove(p.p_id)
+                    if not stable.people:
+                        t_stable.append(stable)
+                    break
+            for un_stable in unstable_buses:
+                if p.p_id in un_stable.people:
+                    un_stable.people.remove(p.p_id)
+                    if not un_stable.people:
+                        t_unstable.append(un_stable)
+                    break
+            t_unde = [u for u in undetermined if u[0] == p.p_id]
+            if t_unde:
+                undetermined.remove(t_unde[0])
+        list(map(lambda x:stable_buses.remove(x), t_stable))
+        list(map(lambda x:unstable_buses.remove(x), t_unstable))
 
     def move(self, length, angle):
-        self.__location = [self.__location+length*cos(angle), self.__location+length*sin(angle)]
+        self.__location = [self.__location[0]+length*cos(angle), self.__location[1]+length*sin(angle)]
 
 
     def calculate_passenger_location(self):
@@ -85,4 +101,10 @@ class bus(object):
             theta = uniform(0, pi)
             L.append([pid, [self.__location[0]+x+r*sin(theta), self.__location[1]+y+r*cos(theta)]])
         return L
+
+    def getPassengerID(self):
+        return [x.p_id for x in self.__passenger_on_this_bus]
+
+    def getID(self):
+        return self.__bus_id
 
