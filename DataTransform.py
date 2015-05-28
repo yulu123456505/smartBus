@@ -1,5 +1,6 @@
 __author__ = 'Steven'
 import pymysql
+from calDis import calDis_segment2rect
 
 def connDB(): #连接数据库函数
     conn=pymysql.connect(host='localhost', user='root', passwd='123456', db='businquire', charset='utf8')
@@ -42,9 +43,57 @@ def readLatestData():
     return r[0]
 
 
+#经度分割数量，纬度分割数量，GPS精度
+def mapGrid(Longitude_num, Latitude_num, GPS_accuracy):
+    conn,cur =connDB()
+    sql = "delete from maparea"    #删除原有的所有记录
+    cur.execute(sql)
+    conn.commit()
+    sql = "select max(startPoint_x),min(startPoint_x),max(startPoint_y),min(startPoint_y),max(endPoint_x),min(endPoint_x),max(endPoint_y),min(endPoint_y) from busline"
+    r = exeQuery(cur,sql)
+    r = r[0]
+    #计算经度纬度的最大最小值
+    Longitude_max = max(r[0], r[4])
+    Longitude_min = min(r[1], r[5])
+    Latitude_max = max(r[2], r[6])
+    Latitude_min = min(r[3], r[7])
+    Longitude_step = (Longitude_max - Longitude_min)/Longitude_num
+    Latitude_step = (Latitude_max - Latitude_min)/Latitude_num
+
+    sql = "select * from busline"
+    cur.execute(sql)
+    r = cur.fetchall()
+    for n in range(Latitude_num):
+        for m in range(Longitude_num):
+            lineID  = []
+            routeID = []
+            upleft_x = Longitude_min+m*Longitude_step
+            upleft_y = Latitude_min+(n+1)*Latitude_step
+            downright_x = Longitude_min+(m+1)*Longitude_step
+            downright_y = Latitude_min+n*Latitude_step
+            for line in r:
+                dis = calDis_segment2rect(line[1], line[2], line[3], line[4], upleft_x, upleft_y, downright_x, downright_y)
+                if calDis_segment2rect(line[1], line[2], line[3], line[4], upleft_x, upleft_y, downright_x, downright_y) <= GPS_accuracy:
+                    '''线段到区域的距离小于GPS精度'''
+                    if line[0] not in lineID:
+                        lineID.append(line[0])
+                    for s in line[5].split(','):
+                        if s not in routeID:
+                            routeID.append(s)
+            lineID = [str(x) for x in lineID]
+            data = (upleft_x,upleft_y,downright_x,downright_y,','.join(lineID),','.join(routeID))
+            data = [str(x) for x in data]
+            sta=cur.execute("insert into maparea (upleft_x,upleft_y,downright_x,downright_y,linesContained,routeContained) values(%s,%s,%s,%s,%s,%s)", data)
+            conn.commit()
+
+    connClose(conn,cur)
+
+
+
 if __name__=='__main__':
-    data = ('xiaomi', '20150415',1.23434245,1.45245,1.245, 1.2452,1.245252,1.2452, 1.0,1.0,1.0, 1.0,1.0,1.0, 1.0,1.0, 1.0,1.0, 2.0,2.0,2.0)
-    sta = saveAllData(data)
+    #data = ('xiaomi', '20150415', 1.23434245, 1.45245, 1.245, 1.2452, 1.245252, 1.2452, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0)
+    #sta = saveAllData(data)
     #data = readLatestData()
     #print(data)
+    mapGrid(10,10,0)
 
