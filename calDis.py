@@ -25,8 +25,6 @@ def calDis_point2line(point_x, point_y, line_x1, line_y1, line_x2, line_y2):
 
 #计算点到线段的距离
 def calDis_point2segment(point_x, point_y, line_x1, line_y1, line_x2, line_y2):
-    projection_x = 0
-    projection_y = 0
     if line_x1 == line_x2:
         projection_x = line_x1
         projection_y = point_y
@@ -37,21 +35,33 @@ def calDis_point2segment(point_x, point_y, line_x1, line_y1, line_x2, line_y2):
             projection_y = line_y1
         else:
             projection_x = (k * line_x1 + point_x/k + point_y-line_y1)/(1/k + k)
-            projection_y = (1/k)*(projection_x-point_x) + point_y
-    if line_x1 == line_x2:
-        if min(line_y1, line_y2) <= projection_y <= max(line_y1, line_y2):
-            return calDis_point2point(point_x,point_y,projection_x,projection_y)
-        else:
-            return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y))
-    elif (line_y1 - line_y2)/(line_x1-line_x2) == 0:
-        if min(line_x1, line_x2) <= projection_x <= max(line_x1, line_x2):
-            return calDis_point2point(point_x,point_y,projection_x,projection_y)
-        else:
-            return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y))
-    if min(line_x1, line_x2) <= projection_x <= max(line_x1, line_x2):
-        return calDis_point2point(point_x,point_y,projection_x,projection_y)
+            projection_y = (1/k)*(point_x - projection_x) + point_y
+    # if line_x1 == line_x2:
+    #     if min(line_y1, line_y2) <= projection_y <= max(line_y1, line_y2):
+    #         return calDis_point2point(point_x,point_y,projection_x,projection_y), (projection_x, projection_y)
+    #     else:
+    #         return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y)), (projection_x, projection_y)
+    # elif (line_y1 - line_y2)/(line_x1-line_x2) == 0:
+    #     if min(line_x1, line_x2) <= projection_x <= max(line_x1, line_x2):
+    #         return calDis_point2point(point_x,point_y,projection_x,projection_y), (projection_x, projection_y)
+    #     else:
+    #         return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y)), (projection_x, projection_y)
+    # if min(line_x1, line_x2) <= projection_x <= max(line_x1, line_x2):
+    #     return calDis_point2point(point_x,point_y,projection_x,projection_y), (projection_x, projection_y)
+    # else:
+    #     return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y)), (projection_x, projection_y)
+    dis1 = calDis_point2point(projection_x, projection_y, line_x1, line_y1)
+    dis2 = calDis_point2point(projection_x, projection_y, line_x2, line_y2)
+    dis3 = calDis_point2point(line_x1, line_y1, line_x2, line_y2)
+    if dis1 + dis2 == dis3:
+        '''投影点在线段上'''
+        return calDis_point2point(projection_x, projection_y, point_x, point_y), (projection_x, projection_y)
     else:
-        return min(calDis_point2point(line_x1,line_y1,point_x,point_y),calDis_point2point(line_x2,line_y2,point_x,point_y))
+        if dis1 < dis2:
+            return calDis_point2point(line_x1, line_y1, point_x, point_y), (line_x1, line_y1)
+        else:
+            return calDis_point2point(line_x2, line_y2, point_x, point_y), (line_x2, line_y2)
+
 
 #判断线段和线段是否相交
 def segmentIntersection(segment1_x1, segment1_y1, segment1_x2, segment1_y2, segment2_x1, segment2_y1, segment2_x2, segment2_y2):
@@ -135,20 +145,20 @@ def calDis_segment2rect(segment_x1, segment_y1, segment_x2, segment_y2, rect_upl
     if segmentIntersection(segment_x1, segment_y1, segment_x2, segment_y2, rect_upleft_x, rect_downright_y, rect_upleft_x, rect_upleft_y):
         return 0
     #矩形四个顶点到线段的距离
-    a1 = calDis_point2segment(rect_upleft_x, rect_upleft_y, segment_x1, segment_y1, segment_x2, segment_y2)
-    a2 = calDis_point2segment(rect_downright_x, rect_upleft_y, segment_x1, segment_y1, segment_x2, segment_y2)
-    a3 = calDis_point2segment(rect_downright_x, rect_downright_y, segment_x1, segment_y1, segment_x2, segment_y2)
-    a4 = calDis_point2segment(rect_upleft_x, rect_downright_y, segment_x1, segment_y1, segment_x2, segment_y2)
+    a1 = calDis_point2segment(rect_upleft_x, rect_upleft_y, segment_x1, segment_y1, segment_x2, segment_y2)[0]
+    a2 = calDis_point2segment(rect_downright_x, rect_upleft_y, segment_x1, segment_y1, segment_x2, segment_y2)[0]
+    a3 = calDis_point2segment(rect_downright_x, rect_downright_y, segment_x1, segment_y1, segment_x2, segment_y2)[0]
+    a4 = calDis_point2segment(rect_upleft_x, rect_downright_y, segment_x1, segment_y1, segment_x2, segment_y2)[0]
     #线段两个端点到矩形四条边的距离
-    a5 = calDis_point2segment(segment_x1, segment_y1, rect_upleft_x, rect_upleft_y, rect_downright_x, rect_upleft_y)
-    a6 = calDis_point2segment(segment_x1, segment_y1, rect_downright_x, rect_upleft_y, rect_downright_x, rect_downright_y)
-    a7 = calDis_point2segment(segment_x1, segment_y1, rect_downright_x, rect_downright_y, rect_upleft_x, rect_downright_y)
-    a8 = calDis_point2segment(segment_x1, segment_y1, rect_upleft_x, rect_downright_y, rect_upleft_x, rect_upleft_y)
+    a5 = calDis_point2segment(segment_x1, segment_y1, rect_upleft_x, rect_upleft_y, rect_downright_x, rect_upleft_y)[0]
+    a6 = calDis_point2segment(segment_x1, segment_y1, rect_downright_x, rect_upleft_y, rect_downright_x, rect_downright_y)[0]
+    a7 = calDis_point2segment(segment_x1, segment_y1, rect_downright_x, rect_downright_y, rect_upleft_x, rect_downright_y)[0]
+    a8 = calDis_point2segment(segment_x1, segment_y1, rect_upleft_x, rect_downright_y, rect_upleft_x, rect_upleft_y)[0]
 
-    a9 = calDis_point2segment(segment_x2, segment_y2, rect_upleft_x, rect_upleft_y, rect_downright_x, rect_upleft_y)
-    a10 = calDis_point2segment(segment_x2, segment_y2, rect_downright_x, rect_upleft_y, rect_downright_x, rect_downright_y)
-    a11 = calDis_point2segment(segment_x2, segment_y2, rect_downright_x, rect_downright_y, rect_upleft_x, rect_downright_y)
-    a12 = calDis_point2segment(segment_x2, segment_y2, rect_upleft_x, rect_downright_y, rect_upleft_x, rect_upleft_y)
+    a9 = calDis_point2segment(segment_x2, segment_y2, rect_upleft_x, rect_upleft_y, rect_downright_x, rect_upleft_y)[0]
+    a10 = calDis_point2segment(segment_x2, segment_y2, rect_downright_x, rect_upleft_y, rect_downright_x, rect_downright_y)[0]
+    a11 = calDis_point2segment(segment_x2, segment_y2, rect_downright_x, rect_downright_y, rect_upleft_x, rect_downright_y)[0]
+    a12 = calDis_point2segment(segment_x2, segment_y2, rect_upleft_x, rect_downright_y, rect_upleft_x, rect_upleft_y)[0]
 
     return min(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12)
 
@@ -156,7 +166,7 @@ if __name__ == '__main__':
     s = calDis_point2point(114.364888,30.533125,114.368211,30.533113)
     print(s)
     ss = calDis_point2segment(114.364888,30.533125,114.368256,30.536162,114.368616,30.536154)
-    print(ss)
+    print(ss[0])
     b = segmentIntersection(114.365588,30.543868,114.366873,30.542783,114.366873,30.542783,114.366145,30.540975)
     print(b)
     c = calDis_segment2rect(114.368256,30.536162,114.368616,30.536154,114.368616,30.536154,114.369195,30.535971)

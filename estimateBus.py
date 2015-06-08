@@ -40,7 +40,7 @@ class bus(object):
         new_on_people = sample(people_idle, people_num)
         #输出新上车的人
         ps = [pid.p_id for pid in new_on_people]
-        print(ps)
+        # print(ps)
 
         list(map(lambda x:people_idle.remove(x), new_on_people))    #新上车的人从空闲乘客中删除
         list(map(lambda x:people_on_bus.append(x), new_on_people))    #新上车的人加入已上车的乘客中
@@ -87,6 +87,8 @@ class bus(object):
     def move(self, length, angle):
         self.__location = [self.__location[0]+length*cos(angle), self.__location[1]+length*sin(angle)]
 
+    def setLocation(self, location):
+        self.__location = location
 
     def calculate_passenger_location(self):
         self.__passenger_location = [[p.p_id, [p.p_seat_location[0]*cos(self.__bus_angle)+p.p_seat_location[1]*sin(self.__bus_angle), p.p_seat_location[1]*cos(self.__bus_angle)-p.p_seat_location[0]*sin(self.__bus_angle)]] for p in self.__passenger_on_this_bus]
@@ -95,11 +97,13 @@ class bus(object):
         self.calculate_passenger_location()
         L = []
         for pid, location in self.__passenger_location:
-            x = location[0]
-            y = location[1]
-            r = randrange(self.__GPS_accuracy)
+            x = self.__location[0]
+            y = self.__location[1]
+            # r = randrange(self.__GPS_accuracy)
             theta = uniform(0, pi)
-            L.append([pid, [self.__location[0]+x+r*sin(theta), self.__location[1]+y+r*cos(theta)]])
+            x = x + 0.0001 * cos(theta)
+            y = y + 0.0001 * sin(theta)
+            L.append([pid, [x, y]])
         return L
 
     def getPassengerID(self):

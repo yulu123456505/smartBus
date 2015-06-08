@@ -2,6 +2,10 @@ from functools import reduce
 from para import predicted_buses, stable_buses, unstable_buses, undetermined
 from stable_bus import stable_bus
 from unstable_bus import unstable_bus
+from calDis import calDis_point2point, calDis_point2segment
+from DataTransform import searchRouteByRegion, searchSegmentById
+from temp import maparea,buslines,searchRegion,busroutes
+import itertools
 
 def cluster(people_location, precision=40):
     points = [location for pid, location in people_location]
@@ -18,8 +22,9 @@ def cluster(people_location, precision=40):
             circle_num = 0
             while center_point != shift_point:
                 center_point = shift_point
-                p = [[t, x] for t, x in enumerate(points) if flag[t] != 1 and abs(center_point[0] - x[0]) <= precision and abs(center_point[1] - x[1]) <= precision]    #先缩小范围在方形区域
-                p = [[t, x] for t, x in p if abs(center_point[0] - x[0])**2 + abs(center_point[1] - x[1])**2 <= precision**2]    #再在方形区域中计算是不是在圆内
+                # p = [[t, x] for t, x in enumerate(points) if flag[t] != 1 and abs(center_point[0] - x[0]) <= precision and abs(center_point[1] - x[1]) <= precision]    #先缩小范围在方形区域
+                # p = [[t, x] for t, x in p if abs(center_point[0] - x[0])**2 + abs(center_point[1] - x[1])**2 <= precision**2]    #再在方形区域中计算是不是在圆内
+                p = [[t, x] for t, x in enumerate(points) if flag[t] != 1 and calDis_point2point(center_point[0], center_point[1], x[0], x[1]) <= precision]
                 vector = [[x[0]-center_point[0], x[1]-center_point[1]] for i, x in p]
                 if len(vector) == 1:
                     shift_point = vector[0]
@@ -75,12 +80,14 @@ def dynamic_cluster(people_location, precision=40):
     list(map(lambda x:predicted_buses.append(x), this_buses))
     return this_cluster_points, this_cluster_center, this_buses
 
+#判断一个点是不是在已center为中心，precision为半径的范围内
 def is_in_cluster(new_point, cluster_center, precision=40):
-    if abs(new_point[0]-cluster_center[0])**2+abs(new_point[1]-cluster_center[1])**2 <= precision**2:
+    if calDis_point2point(new_point[0], new_point[1], cluster_center[0], cluster_center[1]) <= precision:
         return True
     else:
         return False
-
+#动态聚类算法
+#输入：所有用户的GPS信息， 定位的精度
 def dynamic_cluster2(people_location, precision=40):
     this_stable_buses = []
     this_unstable_buses = []
@@ -106,14 +113,14 @@ def dynamic_cluster2(people_location, precision=40):
             '''稳定状态分裂则都加入不稳定状态'''
             for bus in t_buses:
                 unstable_max_id += 1
-                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1]))
+                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, [], s_bus.line_num, s_bus.direction))
         elif len(t_buses) == 1:
             '''没有分裂只更新位置'''
-            this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count))
+            this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count, s_bus.routes, s_bus.line_num, s_bus.direction))
 
     for i in range(len(this_stable_buses)):
         '''输出合并次数列表，供调试'''
-        print(this_stable_buses[i].s_id, this_stable_buses[i].coincide_bus_count)
+        #print(this_stable_buses[i].s_id, this_stable_buses[i].coincide_bus_count)
 
     for i in range(len(this_stable_buses)):
         '''删除coincide_bus_count中不存在的id'''
@@ -169,9 +176,12 @@ def dynamic_cluster2(people_location, precision=40):
                 list(map(lambda x:t_coincide_bus.append(this_stable_buses[x]), num))
                 stable_max_id += 1
                 coincide_people = []
+                t_routes = []
                 for j in num:
                     coincide_people += this_stable_buses[j].people
-                t_coincide_new_bus.append(stable_bus(stable_max_id, this_stable_buses[i].location, coincide_people, []))
+                    t_routes += this_stable_buses[j].routes
+                t_routes = list(set(t_routes))
+                t_coincide_new_bus.append(stable_bus(stable_max_id, this_stable_buses[i].location, coincide_people, [], t_routes, this_stable_buses[i].line_num, this_stable_buses[i].direction))
     '''删掉原来的，加入新合并的'''
     list(map(lambda x:this_stable_buses.remove(x), t_coincide_bus))
     list(map(lambda x:this_stable_buses.append(x), t_coincide_new_bus))
@@ -185,15 +195,15 @@ def dynamic_cluster2(people_location, precision=40):
             '''不稳定状态分裂仍然是不稳定状态'''
             for bus in t_buses:
                 unstable_max_id += 1
-                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1]))
+                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, [], us_bus.line_num, us_bus.direction))
         elif len(t_buses) == 1:
             '''没有分裂则计数加1，满足要求则转换为稳定状态'''
             us_bus.stable_count += 1
             if us_bus.stable_count == continuous_stable_num:
                 stable_max_id += 1
-                this_stable_buses.append(stable_bus(stable_max_id, t_buses[0][0], us_bus.people, []))
+                this_stable_buses.append(stable_bus(stable_max_id, t_buses[0][0], us_bus.people, [], us_bus.routes, us_bus.line_num, us_bus.direction))
             else:
-                this_unstable_buses.append(unstable_bus(us_bus.us_id, t_buses[0][0], us_bus.people, us_bus.stable_count))
+                this_unstable_buses.append(unstable_bus(us_bus.us_id, t_buses[0][0], us_bus.people, us_bus.stable_count, us_bus.routes, us_bus.line_num, us_bus.direction))
 
     t_undetermined = [[pid, location, arround_buses] for pid, location in people_location for pid2, arround_buses in undetermined if pid == pid2]
     for u_determine in t_undetermined:
@@ -257,5 +267,57 @@ def dynamic_cluster2(people_location, precision=40):
         undetermined.pop()
     list(map(lambda x:undetermined.append(x), this_undetermined))
 
-
+    #路线匹配
+    for s_bus in itertools.chain(stable_buses, unstable_buses):
+        # if len(s_bus.routes) != 1:
+        segmentids, routeid = searchRegion(s_bus.location[0], s_bus.location[1])
+        dises = []
+        res = []
+        for s_id in segmentids.split(','):
+            r = buslines[s_id]
+            dis, projection_point = calDis_point2segment(s_bus.location[0], s_bus.location[1], r[1], r[2], r[3], r[4])
+            dises.append(dis)
+            res.append([dis, projection_point, r[5], r[0]])
+        #在所有的距离中找到小于精度的，然后将路线的集合作为可能匹配的路线
+        route = [r[2] for r in res if r[0] <= precision]
+        routes = list(set((','.join(route)).split(',')))
+        if not s_bus.routes:
+            s_bus.routes = routes
+        else:
+            s_bus.routes = [x for x in s_bus.routes if x in routes]
+        #找到最短距离的线段，将投影点作为公交的位置
+        mindis = min(dises)
+        t = [(p[1], p[3]) for p in res if p[0] == mindis]
+        new_location = t[0][0]
+        new_line_num = str(t[0][1])
+        if s_bus.location != new_location:
+            '''车辆位置发生变化时才会更新行驶方向'''
+            if s_bus.line_num != '0':
+                if s_bus.line_num == new_line_num:
+                    '''前后都在一条线段上'''
+                    r = buslines[s_bus.line_num]
+                    if calDis_point2point(new_location[0], new_location[1], r[1], r[2]) > calDis_point2point(new_location[0], new_location[1], r[3], r[4]):
+                        s_bus.direction = 1
+                    else:
+                        s_bus.direction = -1
+                else:
+                    bus_route = busroutes[s_bus.routes[0]]
+                    bus_route = bus_route.split(',')
+                    num1 = bus_route.index(s_bus.line_num)
+                    num2 = bus_route.index(new_line_num)
+                    if num2 > num1:
+                        p_num = num2-1
+                    else:
+                        p_num = num2+1
+                    r1 = buslines[new_line_num]
+                    r2 = buslines[bus_route[p_num]]
+                    for i in (r2[1], r2[3]):
+                        if r1[1] == i:
+                            s_bus.direction = 1
+                            break
+                        if r1[3] == i:
+                            s_bus.direction = -1
+                            break
+        s_bus.location = new_location
+        s_bus.line_num = new_line_num
 
