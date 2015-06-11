@@ -1,6 +1,7 @@
 from random import sample, randrange, uniform
 from math import pi, sin, cos
-from para import people_idle, people_on_bus, stable_buses, unstable_buses, undetermined
+from para import people_idle, people_on_bus, stable_buses, unstable_buses, undetermined, disappeared
+import datetime
 
 class bus(object):
     def __init__(self, bus_id=1, location=(randrange(1000), randrange(1000)), bus_angle = 0):
@@ -51,7 +52,7 @@ class bus(object):
     #下车
     def off_bus(self, people_num=0):
         if people_num >= len(self.__seat_with_passenger):
-            people_num = len(self.__seat_with_passenger)-1
+            people_num = len(self.__seat_with_passenger)
         self.__people_num = self.__people_num - people_num    #更新乘客的数量
 
         new_off_people = sample(self.__passenger_on_this_bus, people_num)
@@ -63,6 +64,7 @@ class bus(object):
         list(map(lambda x:self.__seat_with_passenger.remove(x), new_off_seat))    #从有乘客的座位中删除
         list(map(lambda x:x.set_bus_Info(0, [0, 0]), new_off_people))    #下车乘客的公交信息设置为0，[0，0]
 
+        #用户下车后需要进行的操作，包括从stablebuses,unstablebuses,undetermined中删除该用户，还有检查是否满足加入disappeared的条件
         t_stable = []
         t_unstable = []
         for p in new_off_people:
@@ -81,8 +83,20 @@ class bus(object):
             t_unde = [u for u in undetermined if u[0] == p.p_id]
             if t_unde:
                 undetermined.remove(t_unde[0])
+
         list(map(lambda x:stable_buses.remove(x), t_stable))
         list(map(lambda x:unstable_buses.remove(x), t_unstable))
+        #检查空车是否满足 路线唯一 的条件，满足则加入disappeared
+        if t_stable:
+            nowtime = datetime.datetime.now()
+            for stable in t_stable:
+                if len(stable.routes) == 1:
+                    stable.lasttime = nowtime    #lasttime记录公交车上一次预测的时间，刚消失时为消失的时间
+                    stable.predict_num = 0
+                    disappeared.append(stable)
+
+
+
 
     def move(self, length, angle):
         self.__location = [self.__location[0]+length*cos(angle), self.__location[1]+length*sin(angle)]

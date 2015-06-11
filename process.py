@@ -13,10 +13,10 @@ from temp import maparea, buslines, busroutes
 def print_info():
     print("***********************stable************************")
     for s_bus in stable_buses:
-        print(s_bus.s_id, s_bus.location, s_bus.people, s_bus.routes, s_bus.direction)
+        print(s_bus.s_id, s_bus.location, s_bus.people, s_bus.routes, s_bus.direction, s_bus.line_num)
     print("***********************unstable************************")
     for us_bus in unstable_buses:
-        print(us_bus.us_id, us_bus.location, us_bus.people, us_bus.routes, us_bus.direction)
+        print(us_bus.us_id, us_bus.location, us_bus.people, us_bus.routes, us_bus.direction, us_bus.line_num)
     print('***********undetermined*******************')
     for u in undetermined:
         print(u)
@@ -97,37 +97,73 @@ if __name__ == '__main__':
     # plt.plot(unstable_count)
     # plt.plot(stable_and_unstable)
     # plt.show()
-    route = range(2, 51)
-    r = buslines['1']
+
+
+    # route = range(2, 51)
+    # r = buslines['1']
+    # a = bus(999, (r[1],r[2]))
+    # a.on_bus(20)
+    # b = bus(999, (r[1],r[2]))
+    # b.on_bus(20)
+    # a.setLocation((r[1], r[2]))
+    # b.setLocation((r[1], r[2]))
+    # L=[]
+    # for i in route:
+    #     r = buslines[str(i)]
+    #     # gps = [[1, [r[1], r[2]]]]
+    #     a.setLocation((r[1], r[2]))
+    #     b.setLocation((r[1], r[2]))
+    #     num = randrange(1, 5)
+    #     print('上车人数：',num,'**********')
+    #     a.on_bus(num)
+    #     b.on_bus(num)
+    #     num = randrange(1, 5)
+    #     print('下车人数：',num,'**********')
+    #     a.off_bus(num)
+    #     b.off_bus(num)
+    #     print('a车', a.getPassengerID())
+    #     print('b车', b.getPassengerID())
+    #     print('*****车上人数为',len(a.getPassengerID()),'***************')
+    #     L = a.getGPS() + b.getGPS()
+    #     dynamic_cluster2(L, 40)
+    #     print_info()
+    #     print('**********大循环公交的位置************')
+    #     print(searchRouteLocation('1'))
+
+
+    route = range(12, 17)
+    r = buslines['11']
     a = bus(999, (r[1],r[2]))
-    a.on_bus(20)
-    b = bus(999, (r[1],r[2]))
-    b.on_bus(20)
-    a.setLocation((r[1], r[2]))
-    b.setLocation((r[1], r[2]))
-    L=[]
+    a.on_bus(5)
     for i in route:
         r = buslines[str(i)]
-        # gps = [[1, [r[1], r[2]]]]
         a.setLocation((r[1], r[2]))
-        b.setLocation((r[1], r[2]))
-        num = randrange(1, 5)
-        print('上车人数：',num,'**********')
-        a.on_bus(num)
-        b.on_bus(num)
-        num = randrange(1, 5)
-        print('下车人数：',num,'**********')
-        a.off_bus(num)
-        b.off_bus(num)
+        a.off_bus(1)
         print('a车', a.getPassengerID())
-        print('b车', b.getPassengerID())
         print('*****车上人数为',len(a.getPassengerID()),'***************')
-        L = a.getGPS() + b.getGPS()
+        L = a.getGPS()
         dynamic_cluster2(L, 40)
         print_info()
         print('**********大循环公交的位置************')
         print(searchRouteLocation('1'))
-        # time.sleep(1)
+        time.sleep(1)
+
+    route = range(18, 23)
+    r = buslines['17']
+    a.setLocation((r[1], r[2]))
+    for i in route:
+        r = buslines[str(i)]
+        a.setLocation((r[1], r[2]))
+        a.on_bus(1)
+        print('a车', a.getPassengerID())
+        print('*****车上人数为',len(a.getPassengerID()),'***************')
+        L = a.getGPS()
+        dynamic_cluster2(L, 40)
+        print_info()
+        print('**********大循环公交的位置************')
+        print(searchRouteLocation('1'))
+
+
 
 
 

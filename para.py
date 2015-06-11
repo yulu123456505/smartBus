@@ -6,3 +6,5 @@ predicted_buses = []
 stable_buses = []
 unstable_buses = []
 undetermined = []
+
+disappeared = []
