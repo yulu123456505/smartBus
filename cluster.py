@@ -9,6 +9,27 @@ import itertools
 import datetime
 
 def cluster(people_location, precision=40):
+    """cluster the bus via the data from people's GPS on a moment
+
+    the function uses mean-shift algorithm which use a circle to enclose as much as people, each iteration adjust the
+    center of the circle to find the high-density place until the center is stable.
+
+    Args:
+        people_location:a list contains all people's GPS data on a moment with people id and location
+            example:
+            [ [1, [114.1, 30.5]], [2, [114.2, 30.4]] ]
+        precision:the radius of the circle in the mean-shift algorithm which indicate the error of GPS
+    Returns:
+        cluster_points: a list which contains the people's GPS data in every result
+            example:
+            [ [[1, [114.36480123305492, 30.533082344631634]],[2, [114.3648302288409, 30.532986640690257]] ]]
+        cluster_center: a list which contains the center point of each result
+            example:
+            [[114.36479491066619, 30.532969549010176]]
+        buses: a list which contains the people id in every result
+            example:
+            [[[114.36479491066619, 30.532969549010176], [1, 2]]]
+    """
     points = [location for pid, location in people_location]
     p_ids = [p_id for p_id, location in people_location]
     flag = [0 for x in range(len(points))]
@@ -16,15 +37,12 @@ def cluster(people_location, precision=40):
     cluster_points = []
     buses = []
     for i, point in enumerate(points):
-        #print(p_ids[i], point, flag[i])
         if flag[i] == 0:
             center_point = [-1, -1]
             shift_point = point
             circle_num = 0
             while center_point != shift_point:
                 center_point = shift_point
-                # p = [[t, x] for t, x in enumerate(points) if flag[t] != 1 and abs(center_point[0] - x[0]) <= precision and abs(center_point[1] - x[1]) <= precision]    #先缩小范围在方形区域
-                # p = [[t, x] for t, x in p if abs(center_point[0] - x[0])**2 + abs(center_point[1] - x[1])**2 <= precision**2]    #再在方形区域中计算是不是在圆内
                 p = [[t, x] for t, x in enumerate(points) if flag[t] != 1 and calDis_point2point(center_point[0], center_point[1], x[0], x[1]) <= precision]
                 vector = [[x[0]-center_point[0], x[1]-center_point[1]] for i, x in p]
                 if len(vector) == 1:
@@ -46,42 +64,113 @@ def cluster(people_location, precision=40):
     return cluster_points, cluster_center, buses
 
 def dynamic_cluster(people_location, precision=40):
-    print(len(people_location), "people_location", people_location)
-    this_cluster_points = []
-    this_cluster_center = []
-    this_buses = []
-    for bus in predicted_buses:
-        to_cluster = [[pid, location] for pid, location in people_location if pid in bus[1]]
-        list(map(lambda x:people_location.remove(x), to_cluster))
-        t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision)
-        this_cluster_points = this_cluster_points + t_cluster_points
-        this_cluster_center = this_cluster_center + t_cluster_center
-        this_buses = this_buses + t_buses
-    print(len(people_location), "people_location", people_location)
-    print(len(this_buses),len(this_cluster_center),len(this_cluster_points))
-    temp_people = []
-    for p in people_location:
-        for i, location in enumerate(this_cluster_center):
-            if is_in_cluster(p[1], location, precision):
-                this_cluster_points[i].append(p)    #把人加入对应的公交车上
-                this_buses[i][1].append(p[0])    #把乘客编号加入对应的公交车上
-                temp_people.append(p)
-    try:
-        list(map(lambda x:people_location.remove(x), temp_people))    #删掉加入聚类中心的点
-    except(ValueError):
-        print(len(temp_people),"temp_people",temp_people)
-        print(len(people_location),"people:",people_location)
+    """update the location and route of buses dynamically.
+
+    Args:
+        people_location:a list contains all people's GPS data on a moment with people id and location
+            example:
+            [ [1, [114.1, 30.5]], [2, [114.2, 30.4]] ]
+        precision:the radius of the circle in the mean-shift algorithm which indicate the error of GPS.
+    Returns:
+        no return. The function maintains the following global variable:
+        stable_buses: a list contains the stable buses.
+        unstable_buses: a list contains the unstable buses.
+        undetermined: a list contains the people which can't determine which stable buses to join in.
+    """
+    #每次聚类之前更新空车的位置
+    predict_disappear()
+    #现有的聚类结果中有，但是本次聚类的数据中没有的乘客，视作已经下车，从聚类结果中删除
+    update_off_people(people_location)
+
+    this_stable_buses = []
+    this_unstable_buses = []
+    this_undetermined = []
+    if len(stable_buses) > 0:
+        stable_max_id = max([s_bus.s_id for s_bus in stable_buses])    #稳定状态集合的最大id
+    else:
+        stable_max_id = 0
+    for s_bus in stable_buses:
+        '''对每一个稳定状态重新聚类'''
+        to_cluster = [[pid, location] for pid, location in people_location if pid in s_bus.people]
+        t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision+20)
+        if len(t_buses) > 1:
+            '''稳定状态分裂则都加入不稳定状态'''
+            for bus in t_buses:
+                pass
+        elif len(t_buses) == 1:
+            '''没有分裂只更新位置'''
+            list(map(lambda x:people_location.remove(x), to_cluster))
+            this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count, s_bus.routes, s_bus.line_num, s_bus.direction))
+
+    t_undetermined = [[pid, location, arround_buses] for pid, location in people_location for pid2, arround_buses in undetermined if pid == pid2]
+    for u_determine in t_undetermined:
+        '''处理待定集合，附近只有一个稳定状态则加入'''
+        t_stable1 = [stable for stable in this_stable_buses if stable.s_id in u_determine[2]]
+        t_stable2 = [stable for stable in t_stable1 if is_in_cluster(u_determine[1], stable.location, precision)]
+        if len(t_stable2) > 1:
+            '''多于一个，仍是待定状态，更新t_undetermined'''
+            this_undetermined.append([u_determine[0], [bus.s_id for bus in t_stable2]])
+            people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
+        elif len(t_stable2) == 1:
+            '''附近只有一个稳定状态，则加入'''
+            for t_stable_bus in this_stable_buses:
+                if t_stable2[0].s_id == t_stable_bus.s_id:
+                    t_stable_bus.people.append(u_determine[0])
+                    break
+            people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
+        elif len(t_stable2) == 0:
+            '''附近没有稳定状态，则看作普通新上车的用户'''
+            pass
+
+    t_people = []    #保存处理过的用户
+    for people in people_location:
+        '''处理剩下的用户，即新上车的用户'''
+        t_stables = [t_stable for t_stable in this_stable_buses if is_in_cluster(people[1], t_stable.location, precision+20)]
+        if len(t_stables) > 1:
+            '''附近多于1个稳定状态，进入待定'''
+            this_undetermined.append([people[0], [t_stable.s_id for t_stable in t_stables]])
+            t_people.append(people)
+        elif len(t_stables) == 1:
+            '''附近只有一个，加入该稳定状态'''
+            for t_stable in this_stable_buses:
+                if t_stable.s_id == t_stables[0].s_id:
+                    t_stable.people.append(people[0])
+                    t_people.append(people)
+                    break
+
+    list(map(lambda x:people_location.remove(x), t_people))    #处理过的用户都删掉
+
+    '''最后剩下的用户整体调用聚类算法，所有结果都加入不稳定状态'''
     t_cluster_points, t_cluster_center, t_buses = cluster(people_location, precision)
-    this_cluster_points = this_cluster_points + t_cluster_points
-    this_cluster_center = this_cluster_center + t_cluster_center
-    this_buses = this_buses + t_buses
-    l = len(predicted_buses)
-    for i in range(l):
-        predicted_buses.remove(predicted_buses[0])
-    list(map(lambda x:predicted_buses.append(x), this_buses))
-    return this_cluster_points, this_cluster_center, this_buses
+    for bus in t_buses:
+        '''对每一个聚类结果，首先看是否能加入消失的公交车上，如果不能再转为不稳定状态'''
+        possible_bus = [d for d in disappeared if calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1])<= predict_bus_range]
+        if possible_bus:
+            dises = [calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1]) for d in possible_bus]
+            min_index = dises.index(min(dises))
+            stable_max_id += 1
+            this_stable_buses.append(stable_bus(stable_max_id, bus[0], bus[1], [], possible_bus[min_index].routes, possible_bus[min_index].line_num, possible_bus[min_index].direction))
+            disappeared.remove(possible_bus[min_index])
+        else:
+            stable_max_id += 1
+            this_stable_buses.append(stable_bus(stable_max_id, bus[0], bus[1]))
+
+    while stable_buses:
+        stable_buses.pop()
+    list(map(lambda x:stable_buses.append(x), this_stable_buses))
+    while undetermined:
+        undetermined.pop()
+    list(map(lambda x:undetermined.append(x), this_undetermined))
+
+    routeMatch(precision)
 
 def predict_disappear():
+    """predict the location the bus in the disappeared
+
+    if all passengers on a stable bus get off, the stable is saved in the disappeared list(a global variable), before
+     every cluster, we will predict the location of buses in the list. the speed is bus_speed which is defined in the
+     global variable.
+    """
     nowtime = datetime.datetime.now()
     t_delete = []
     for d in disappeared:
@@ -126,9 +215,52 @@ def predict_disappear():
     #从disappeared中删除达到保留次数或已经到达终点站的空车
     list(map(lambda x:disappeared.remove(x), t_delete))
 
+def update_off_people(people_location):
+    people_on_bus = [pid for bus in itertools.chain(stable_buses, unstable_buses) for pid in bus.people]
+    people_all = [p[0] for p in people_location]
+    pid_disappear = [pid for pid in people_on_bus if pid not in people_all]
+    if pid_disappear:
+        t_stable = []
+        t_unstable = []
+        for p in pid_disappear:
+            for stable in stable_buses:
+                if p in stable.people:
+                    stable.people.remove(p)
+                    if not stable.people:
+                        t_stable.append(stable)
+                    break
+            for un_stable in unstable_buses:
+                if p in un_stable.people:
+                    un_stable.people.remove(p)
+                    if not un_stable.people:
+                        t_unstable.append(un_stable)
+                    break
+            t_unde = [u for u in undetermined if u[0] == p]
+            if t_unde:
+                undetermined.remove(t_unde[0])
+
+        list(map(lambda x:stable_buses.remove(x), t_stable))
+        list(map(lambda x:unstable_buses.remove(x), t_unstable))
+        #检查空车是否满足 路线唯一 的条件，满足则加入disappeared
+        if t_stable:
+            nowtime = datetime.datetime.now()
+            for stable in t_stable:
+                if len(stable.routes) == 1:
+                    stable.lasttime = nowtime    #lasttime记录公交车上一次预测的时间，刚消失时为消失的时间
+                    stable.predict_num = 0
+                    disappeared.append(stable)
 
 #判断一个点是不是在已center为中心，precision为半径的范围内
 def is_in_cluster(new_point, cluster_center, precision=40):
+    """judge if a point is in a circle.
+
+    Args:
+        new_point: a list which contain the Longitude and Latitude of the point.
+        cluster_center: a list which contain the Longitude and Latitude of the center of circle.
+        precision: the radius of the circle.
+    Returns:
+        true or false.
+    """
     if calDis_point2point(new_point[0], new_point[1], cluster_center[0], cluster_center[1]) <= precision:
         return True
     else:
@@ -136,6 +268,19 @@ def is_in_cluster(new_point, cluster_center, precision=40):
 #动态聚类算法
 #输入：所有用户的GPS信息， 定位的精度
 def dynamic_cluster2(people_location, precision=40):
+    """update the location and route of buses dynamically.
+
+    Args:
+        people_location:a list contains all people's GPS data on a moment with people id and location
+            example:
+            [ [1, [114.1, 30.5]], [2, [114.2, 30.4]] ]
+        precision:the radius of the circle in the mean-shift algorithm which indicate the error of GPS.
+    Returns:
+        no return. The function maintains the following global variable:
+        stable_buses: a list contains the stable buses.
+        unstable_buses: a list contains the unstable buses.
+        undetermined: a list contains the people which can't determine which stable buses to join in.
+    """
     #每次聚类之前更新空车的位置
     predict_disappear()
 
@@ -163,7 +308,7 @@ def dynamic_cluster2(people_location, precision=40):
             '''稳定状态分裂则都加入不稳定状态'''
             for bus in t_buses:
                 unstable_max_id += 1
-                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, [], s_bus.line_num, s_bus.direction))
+                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, s_bus.routes, s_bus.line_num, s_bus.direction))
         elif len(t_buses) == 1:
             '''没有分裂只更新位置'''
             this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count, s_bus.routes, s_bus.line_num, s_bus.direction))
@@ -192,7 +337,8 @@ def dynamic_cluster2(people_location, precision=40):
             t_coincide1 = [t for t in this_stable_buses[j].coincide_bus_count if t[0] == this_stable_buses[i].s_id]
             t_coincide2 = [t for t in this_stable_buses[i].coincide_bus_count if t[0] == this_stable_buses[j].s_id]
             if len(t_coincide1) == 1 and len(t_coincide2) == 1:
-                if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision):
+                if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision)\
+                        and this_stable_buses[i].routes == this_stable_buses[j].routes and len(this_stable_buses[i].routes) == 1:
                     '''如果重合'''
                     a = [t_coincide1[0][0], t_coincide1[0][1]+1]
                     b = [t_coincide2[0][0], t_coincide2[0][1]+1]
@@ -326,66 +472,82 @@ def dynamic_cluster2(people_location, precision=40):
         undetermined.pop()
     list(map(lambda x:undetermined.append(x), this_undetermined))
 
+    routeMatch(precision)
+
+def routeMatch(precision):
+    """match route for each bus
+    """
     #路线匹配
     for s_bus in itertools.chain(stable_buses, unstable_buses):
         # if len(s_bus.routes) != 1:
         segmentids, routeid = searchRegion(s_bus.location[0], s_bus.location[1])
+        segmentids = segmentids.split(',')
         dises = []
         res = []
-        for s_id in segmentids.split(','):
-            r = buslines[s_id]
-            dis, projection_point = calDis_point2segment(s_bus.location[0], s_bus.location[1], r[1], r[2], r[3], r[4])
-            dises.append(dis)
-            res.append([dis, projection_point, r[5], r[0]])
-        #在所有的距离中找到小于精度的，然后将路线的集合作为可能匹配的路线
-        route = [r[2] for r in res if r[0] <= precision]
-        routes = list(set((','.join(route)).split(',')))
-        if not s_bus.routes:
-            s_bus.routes = routes
-        else:
-            s_bus.routes = [x for x in s_bus.routes if x in routes]
-            if not s_bus.routes:
-                s_bus.routes = routes
-        #找到最短距离的线段，将投影点作为公交的位置
-        mindis = min(dises)
-        possible_line = []
-        for i in s_bus.routes:
-            possible_line += busroutes[i].split(',')
-        t = [(p[1], p[3]) for p in res if p[0] == mindis and str(p[3]) in possible_line]
-        new_location = t[0][0]
-        new_line_num = str(t[0][1])
-        if s_bus.location != new_location:
-            '''车辆位置发生变化时才会更新行驶方向'''
-            if s_bus.line_num != '0':
-                if s_bus.line_num == new_line_num:
-                    '''前后都在一条线段上'''
-                    r = buslines[s_bus.line_num]
-                    if calDis_point2point(new_location[0], new_location[1], r[1], r[2]) > calDis_point2point(new_location[0], new_location[1], r[3], r[4]):
-                        s_bus.direction = 1
-                    else:
-                        s_bus.direction = -1
+        if segmentids != ['']:
+            for s_id in segmentids:
+                try:
+                    r = buslines[s_id]
+                except KeyError as k:
+                    print(k)
+                dis, projection_point = calDis_point2segment(s_bus.location[0], s_bus.location[1], r[1], r[2], r[3], r[4])
+                dises.append(dis)
+                res.append([dis, projection_point, r[5], r[0]])
+            #在所有的距离中找到小于精度的，然后将路线的集合作为可能匹配的路线
+            res = [p for p in res if p[0] <= precision]
+            if s_bus.routes:
+                possible_line = []
+                for i in s_bus.routes:
+                    possible_line += busroutes[i].split(',')
+                res =[p for p in res if str(p[3]) in possible_line]
+            route = [p[2] for p in res]
+            if route:
+                '''只有在精度范围内有路线时才进行线路匹配'''
+                routes = list(set((','.join(route)).split(',')))
+                if not s_bus.routes:
+                    s_bus.routes = routes
                 else:
-                    for i in s_bus.routes:
-                        bus_route = busroutes[i]
-                        bus_route = bus_route.split(',')
-                        if new_line_num in bus_route:
-                            num1 = bus_route.index(s_bus.line_num)
-                            num2 = bus_route.index(new_line_num)
-                            if num2 > num1:
-                                p_num = num2-1
+                    s_bus.routes = [x for x in s_bus.routes if x in routes]
+                    if not s_bus.routes:
+                        s_bus.routes = routes
+                #找到最短距离的线段，将投影点作为公交的位置
+                mindis = min([p[0] for p in res])
+                t = [(p[1], p[3]) for p in res if p[0] == mindis]
+                new_location = t[0][0]
+                new_line_num = str(t[0][1])
+                if s_bus.location != new_location:
+                    '''车辆位置发生变化时才会更新行驶方向'''
+                    if s_bus.line_num != '0':
+                        if s_bus.line_num == new_line_num:
+                            '''前后都在一条线段上'''
+                            r = buslines[s_bus.line_num]
+                            if calDis_point2point(new_location[0], new_location[1], r[1], r[2]) > calDis_point2point(new_location[0], new_location[1], r[3], r[4]):
+                                s_bus.direction = 1
                             else:
-                                p_num = num2+1
-                            r1 = buslines[new_line_num]
-                            r2 = buslines[bus_route[p_num]]
-                            for k in (r2[1], r2[3]):
-                                if r1[1] == k:
-                                    s_bus.direction = 1
+                                s_bus.direction = -1
+                        else:
+                            for i in s_bus.routes:
+                                bus_route = busroutes[i]
+                                bus_route = bus_route.split(',')
+                                if new_line_num in bus_route and s_bus.line_num in bus_route:
+                                    try:
+                                        num1 = bus_route.index(s_bus.line_num)
+                                    except ValueError as v:
+                                        print(v)
+                                    num2 = bus_route.index(new_line_num)
+                                    if num2 > num1:
+                                        p_num = num2-1
+                                    else:
+                                        p_num = num2+1
+                                    r1 = buslines[new_line_num]
+                                    r2 = buslines[bus_route[p_num]]
+                                    for k in (r2[1], r2[3]):
+                                        if r1[1] == k:
+                                            s_bus.direction = 1
+                                            break
+                                        if r1[3] == k:
+                                            s_bus.direction = -1
+                                            break
                                     break
-                                if r1[3] == k:
-                                    s_bus.direction = -1
-                                    break
-                            break
-        s_bus.location = new_location
-        s_bus.line_num = new_line_num
-
-
+                s_bus.location = new_location
+                s_bus.line_num = new_line_num

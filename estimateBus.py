@@ -114,7 +114,7 @@ class bus(object):
             x = self.__location[0]
             y = self.__location[1]
             # r = randrange(self.__GPS_accuracy)
-            theta = uniform(0, pi)
+            theta = uniform(0, 2*pi)
             x = x + 0.0001 * cos(theta)
             y = y + 0.0001 * sin(theta)
             L.append([pid, [x, y]])

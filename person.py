@@ -1,6 +1,6 @@
 class person(object):
     #p_GPS_location = [0, 0]
-    __p_bus_id = 0;
+    __p_bus_id = 0
     __p_bus_location = [0, 0]
     p_seat_location = [0, 0]
     def __init__(self, p_id):

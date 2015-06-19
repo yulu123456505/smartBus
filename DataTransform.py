@@ -155,7 +155,7 @@ if __name__=='__main__':
     #sta = saveAllData(data)
     #data = readLatestData()
     #print(data)
-    mapGrid(15,15,15)
+    mapGrid(15,15,40)
     # r = searchRouteByRegion(114.374571,30.547172)
     # print(r)
     # r = searchSegmentById(22)
