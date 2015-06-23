@@ -6,5 +6,9 @@ predicted_buses = []
 stable_buses = []
 unstable_buses = []
 undetermined = []
+"""待定用户的集合
+    example:
+    [ [pid1,[bus_id1,bus_id2]], [pid2,[bus_id1, bus_id2]], ... ]
+"""
 
 disappeared = []

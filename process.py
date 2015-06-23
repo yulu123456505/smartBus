@@ -4,7 +4,7 @@ from estimateBus import bus
 from person import person
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
-from para import people_idle, stable_buses, unstable_buses
+from para import people_idle, stable_buses, unstable_buses, undetermined
 from math import pi
 import time
 from DataTransform import searchSegmentById, searchRouteLocation, readAllRegionInfo, readAllLineInfo, readAllRouteInfo
@@ -221,7 +221,7 @@ def getSimulateData(data_type):
     return L
 
 if __name__ == '__main__':
-    # L=[]
+
     for i in range(1, 501):
         people_idle.append(person(i))
 
@@ -230,8 +230,10 @@ if __name__ == '__main__':
     buslines.update(readAllLineInfo())
     busroutes.update(readAllRouteInfo())
     print(busroutes)
+
+    #11111
     #people_idle = people
-    #
+    # L=[]
     # map_width = 20
     # map_height = 20
     # bus_num = 20
