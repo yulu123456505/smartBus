@@ -1,5 +1,5 @@
 class unstable_bus(object):
-    def __init__(self, us_id, location, people, stable_count=0, routes=None, line_num='0', direction=0):
+    def __init__(self, us_id, location, people, stable_count=0, routes=None, line_num='0', direction=0, track=None):
         self.us_id = us_id
         self.location = location
         self.people = people
@@ -9,3 +9,6 @@ class unstable_bus(object):
         self.routes = routes
         self.line_num = line_num
         self.direction = direction
+        if track is None:
+            track = []
+        self.track=track

@@ -18,6 +18,7 @@ def calDis_point2point(a2,a1,b2,b1):
     s *= 6371393    #the average radius of earth
     s = round(s*10000)/10000
     return s
+
 #计算点到直线的距离
 def calDis_point2line(point_x, point_y, line_x1, line_y1, line_x2, line_y2):
     """calculate the distance from a point to a straight line.
@@ -79,7 +80,6 @@ def calDis_point2segment(point_x, point_y, line_x1, line_y1, line_x2, line_y2):
             return calDis_point2point(line_x1, line_y1, point_x, point_y), (line_x1, line_y1)
         else:
             return calDis_point2point(line_x2, line_y2, point_x, point_y), (line_x2, line_y2)
-
 
 #判断线段和线段是否相交
 def segmentIntersection(segment1_x1, segment1_y1, segment1_x2, segment1_y2, segment2_x1, segment2_y1, segment2_x2, segment2_y2):

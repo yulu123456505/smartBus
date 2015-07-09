@@ -8,6 +8,7 @@ from temp import maparea,buslines,searchRegion,busroutes, bus_speed, predict_num
 import itertools
 import datetime
 
+#基本聚类算法
 def cluster(people_location, precision=40):
     """cluster the bus via the data from people's GPS on a moment
 
@@ -63,6 +64,7 @@ def cluster(people_location, precision=40):
             buses.append([center_point, [p_ids[n] for n, x in p]])
     return cluster_points, cluster_center, buses
 
+#聚类算法1
 def dynamic_cluster(people_location, precision=40):
     """update the location and route of buses dynamically.
 
@@ -164,6 +166,7 @@ def dynamic_cluster(people_location, precision=40):
 
     routeMatch(precision)
 
+#预测消失的车辆的位置
 def predict_disappear():
     """predict the location the bus in the disappeared
 
@@ -215,6 +218,7 @@ def predict_disappear():
     #从disappeared中删除达到保留次数或已经到达终点站的空车
     list(map(lambda x:disappeared.remove(x), t_delete))
 
+#更新用户数据，看是否有用户下车
 def update_off_people(people_location):
     people_on_bus = [pid for bus in itertools.chain(stable_buses, unstable_buses) for pid in bus.people]
     people_all = [p[0] for p in people_location]
@@ -249,8 +253,14 @@ def update_off_people(people_location):
                     stable.lasttime = nowtime    #lasttime记录公交车上一次预测的时间，刚消失时为消失的时间
                     stable.predict_num = 0
                     disappeared.append(stable)
+    #将下车的人从people_location中删除
+    t_p = []
+    for p in people_location:
+        if p[0] in pid_disappear:
+            t_p.append(p)
+    list(map(lambda x:people_location.remove(x),t_p))
 
-#判断一个点是不是在已center为中心，precision为半径的范围内
+#判断一个点是不是在以center为中心，precision为半径的范围内
 def is_in_cluster(new_point, cluster_center, precision=40):
     """judge if a point is in a circle.
 
@@ -265,228 +275,329 @@ def is_in_cluster(new_point, cluster_center, precision=40):
         return True
     else:
         return False
+
+#根据时间戳过滤无效的数据
+def filter_data_by_timestamp(people_location):
+    t = [[p[0], p[1]] for p in people_location if p[2][13] not in ['1','2','3','4','5','6']]
+    timestamp = [p[2] for p in people_location if p[2][13] in ['0','7','8','9']]
+    return t, timestamp
+
 #动态聚类算法
-#输入：所有用户的GPS信息， 定位的精度
 def dynamic_cluster2(people_location, precision=40):
     """update the location and route of buses dynamically.
 
     Args:
         people_location:a list contains all people's GPS data on a moment with people id and location
             example:
-            [ [1, [114.1, 30.5]], [2, [114.2, 30.4]] ]
+            [ [1, [114.1, 30.5], '20150623101919123'], [2, [114.2, 30.4], '20150623101919124'] , ...]
         precision:the radius of the circle in the mean-shift algorithm which indicate the error of GPS.
     Returns:
         no return. The function maintains the following global variable:
         stable_buses: a list contains the stable buses.
         unstable_buses: a list contains the unstable buses.
-        undetermined: a list contains the people which can't determine which stable buses to join in.
+        undetermined: a list contains the people which can't determine which buses to join in.
     """
     #每次聚类之前更新空车的位置
     predict_disappear()
-
+    #现有的聚类结果中有，但是本次聚类的数据中没有的乘客，视作已经下车，从聚类结果中删除
+    update_off_people(people_location)
+    #筛选时间戳符合要求的数据
+    people_location, timestamp = filter_data_by_timestamp(people_location)
     this_stable_buses = []
     this_unstable_buses = []
     this_undetermined = []
-    #stable_max_id和 unstable_max_id为稳定态和不稳定态的id
-    #stable_max_id为稳定态id，是偶数，从2开始，2.4.6.8.....
-    #unstable_max_id为非稳定态id，是奇数，从3开始，3.5.7.9.....
-    if len(stable_buses) > 0:
-        stable_max_id = max([s_bus.s_id for s_bus in stable_buses])    #稳定状态集合的最大id
-    else:
-        stable_max_id = 0
-    if len(unstable_buses) > 0:
-        unstable_max_id = max([us_bus.us_id for us_bus in unstable_buses])    #不稳定状态集合的最大id
-    else:
-        unstable_max_id = 1
-
-    continuous_coincide_num = 3
-    continuous_stable_num = 3
-
-    for s_bus in stable_buses:
-        '''对每一个稳定状态重新聚类'''
-        to_cluster = [[pid, location] for pid, location in people_location if pid in s_bus.people]
-        list(map(lambda x:people_location.remove(x), to_cluster))
-        t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision+20)
-        if len(t_buses) > 1:
-            '''稳定状态分裂则都加入不稳定状态'''
-            for bus in t_buses:
-                unstable_max_id = (((unstable_max_id+1)/2))*2+1
-                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, s_bus.routes, s_bus.line_num, s_bus.direction))
-        elif len(t_buses) == 1:
-            '''没有分裂只更新位置'''
-            this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count, s_bus.routes, s_bus.line_num, s_bus.direction))
-
-    for i in range(len(this_stable_buses)):
-        '''输出合并次数列表，供调试'''
-        #print(this_stable_buses[i].s_id, this_stable_buses[i].coincide_bus_count)
-
-    for i in range(len(this_stable_buses)):
-        '''删除coincide_bus_count中不存在的id'''
-        t = []    #临时存放要删除的coincide_bus_count
-        for bus_id, count in this_stable_buses[i].coincide_bus_count:
-            f = False
-            for j in range(len(this_stable_buses)):
-                if bus_id == this_stable_buses[j].s_id:
-                    f = True
-                    break
-            if not f:
-                t.append([bus_id, count])
-        list(map(lambda x:this_stable_buses[i].coincide_bus_count.remove(x), t))
 
 
+    if people_location:
+        timestamp = timestamp[0]
 
-    for i in range(len(this_stable_buses)-1):
-        for j in range(i+1, len(this_stable_buses)):
-            t_coincide1 = [t for t in this_stable_buses[j].coincide_bus_count if t[0] == this_stable_buses[i].s_id]
-            t_coincide2 = [t for t in this_stable_buses[i].coincide_bus_count if t[0] == this_stable_buses[j].s_id]
-            if len(t_coincide1) == 1 and len(t_coincide2) == 1:
-                if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision)\
-                        and this_stable_buses[i].routes == this_stable_buses[j].routes and len(this_stable_buses[i].routes) == 1:
-                    '''如果重合'''
-                    a = [t_coincide1[0][0], t_coincide1[0][1]+1]
-                    b = [t_coincide2[0][0], t_coincide2[0][1]+1]
-                    this_stable_buses[j].coincide_bus_count.remove(t_coincide1[0])
-                    this_stable_buses[i].coincide_bus_count.remove(t_coincide2[0])
-                    this_stable_buses[j].coincide_bus_count.append(a)
-                    this_stable_buses[i].coincide_bus_count.append(b)
+        #stable_max_id和 unstable_max_id为稳定态和不稳定态的id
+        #stable_max_id为稳定态id，是偶数，从2开始，2.4.6.8.....
+        #unstable_max_id为非稳定态id，是奇数，从3开始，3.5.7.9.....
+        if len(stable_buses) > 0:
+            stable_max_id = max([s_bus.s_id for s_bus in stable_buses])    #稳定状态集合的最大id
+        else:
+            stable_max_id = 0
+        if len(unstable_buses) > 0:
+            unstable_max_id = max([us_bus.us_id for us_bus in unstable_buses])    #不稳定状态集合的最大id
+        else:
+            unstable_max_id = 1
 
+        continuous_coincide_num = 3
+        continuous_stable_num = 3
+
+        for s_bus in stable_buses:
+            '''对每一个稳定状态重新聚类'''
+            to_cluster = [[pid, location] for pid, location in people_location if pid in s_bus.people]
+            list(map(lambda x:people_location.remove(x), to_cluster))
+            t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision+20)
+            if len(t_buses) > 1:
+                '''稳定状态分裂则都加入不稳定状态'''
+                for bus in t_buses:
+                    unstable_max_id = (((unstable_max_id+1)/2))*2+1
+                    this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, s_bus.routes, s_bus.line_num, s_bus.direction, s_bus.track+[[timestamp, bus[0]]]))
+            elif len(t_buses) == 1:
+                '''没有分裂只更新位置'''
+                this_stable_buses.append(stable_bus(s_bus.s_id, t_buses[0][0], s_bus.people, s_bus.coincide_bus_count, s_bus.routes, s_bus.line_num, s_bus.direction, s_bus.track+[[timestamp, t_buses[0][0]]]))
+
+        for i in range(len(this_stable_buses)):
+            '''输出合并次数列表，供调试'''
+            #print(this_stable_buses[i].s_id, this_stable_buses[i].coincide_bus_count)
+
+        for i in range(len(this_stable_buses)):
+            '''删除coincide_bus_count中不存在的id'''
+            t = []    #临时存放要删除的coincide_bus_count
+            for bus_id, count in this_stable_buses[i].coincide_bus_count:
+                f = False
+                for j in range(len(this_stable_buses)):
+                    if bus_id == this_stable_buses[j].s_id:
+                        f = True
+                        break
+                if not f:
+                    t.append([bus_id, count])
+            list(map(lambda x:this_stable_buses[i].coincide_bus_count.remove(x), t))
+
+
+
+        for i in range(len(this_stable_buses)-1):
+            for j in range(i+1, len(this_stable_buses)):
+                t_coincide1 = [t for t in this_stable_buses[j].coincide_bus_count if t[0] == this_stable_buses[i].s_id]
+                t_coincide2 = [t for t in this_stable_buses[i].coincide_bus_count if t[0] == this_stable_buses[j].s_id]
+                if len(t_coincide1) == 1 and len(t_coincide2) == 1:
+                    if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision)\
+                            and this_stable_buses[i].routes == this_stable_buses[j].routes and len(this_stable_buses[i].routes) == 1:
+                        '''如果重合'''
+                        a = [t_coincide1[0][0], t_coincide1[0][1]+1]
+                        b = [t_coincide2[0][0], t_coincide2[0][1]+1]
+                        this_stable_buses[j].coincide_bus_count.remove(t_coincide1[0])
+                        this_stable_buses[i].coincide_bus_count.remove(t_coincide2[0])
+                        this_stable_buses[j].coincide_bus_count.append(a)
+                        this_stable_buses[i].coincide_bus_count.append(b)
+
+                    else:
+                        this_stable_buses[j].coincide_bus_count.remove(t_coincide1[0])
+                        this_stable_buses[i].coincide_bus_count.remove(t_coincide2[0])
+                elif len(t_coincide1) == 0 and len(t_coincide2) == 0:
+                    if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision):
+                        '''如果重合'''
+                        a = [this_stable_buses[i].s_id, 1]
+                        b = [this_stable_buses[j].s_id, 1]
+                        this_stable_buses[j].coincide_bus_count.append(a)
+                        this_stable_buses[i].coincide_bus_count.append(b)
+
+        t_coincide_bus = []    #暂时存放满足要求的稳定状态
+        t_coincide_new_bus = []    #暂时存放合并以后的稳定状态
+        flag = [0 for i in range(len(this_stable_buses))]
+        for i in range(len(this_stable_buses)):
+            if flag[i] == 0:
+                t = [id for id, count in this_stable_buses[i].coincide_bus_count if count == continuous_coincide_num]
+                if t:
+                    num = [n for n, b in enumerate(this_stable_buses) if b.s_id in t]
+                    num = num + [i]
+                    for j in num:
+                        flag[j] = 1
+                    list(map(lambda x:t_coincide_bus.append(this_stable_buses[x]), num))
+                    stable_max_id = ((stable_max_id/2)+1)*2
+                    coincide_people = []
+                    t_routes = []
+                    for j in num:
+                        coincide_people += this_stable_buses[j].people
+                        t_routes += this_stable_buses[j].routes
+                    t_routes = list(set(t_routes))
+                    t_coincide_new_bus.append(stable_bus(stable_max_id, this_stable_buses[i].location, coincide_people, [],
+                                                         t_routes, this_stable_buses[i].line_num, this_stable_buses[i].direction,
+                                                         this_stable_buses[i]+[[timestamp, this_stable_buses[i].location]]))
+        '''删掉原来的，加入新合并的'''
+        list(map(lambda x:this_stable_buses.remove(x), t_coincide_bus))
+        list(map(lambda x:this_stable_buses.append(x), t_coincide_new_bus))
+
+        for us_bus in unstable_buses:
+            '''对不稳定的状态重新聚类'''
+            to_cluster = [[pid, location] for pid, location in people_location if pid in us_bus.people]
+            list(map(lambda x:people_location.remove(x), to_cluster))
+            t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision+20)
+            if len(t_buses) > 1:
+                '''不稳定状态分裂仍然是不稳定状态'''
+                for bus in t_buses:
+                    unstable_max_id = (((unstable_max_id+1)/2))*2+1
+                    this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, [], us_bus.line_num, us_bus.direction, us_bus.track+[[timestamp, bus[0]]]))
+            elif len(t_buses) == 1:
+                '''没有分裂则计数加1，满足要求则转换为稳定状态'''
+                us_bus.stable_count += 1
+                if us_bus.stable_count == continuous_stable_num:
+                    stable_max_id = ((stable_max_id/2)+1)*2
+                    this_stable_buses.append(stable_bus(stable_max_id, t_buses[0][0], us_bus.people, [], us_bus.routes, us_bus.line_num, us_bus.direction, us_bus.track+[[timestamp, t_buses[0][0]]]))
                 else:
-                    this_stable_buses[j].coincide_bus_count.remove(t_coincide1[0])
-                    this_stable_buses[i].coincide_bus_count.remove(t_coincide2[0])
-            elif len(t_coincide1) == 0 and len(t_coincide2) == 0:
-                if is_in_cluster(this_stable_buses[i].location, this_stable_buses[j].location, precision):
-                    '''如果重合'''
-                    a = [this_stable_buses[i].s_id, 1]
-                    b = [this_stable_buses[j].s_id, 1]
-                    this_stable_buses[j].coincide_bus_count.append(a)
-                    this_stable_buses[i].coincide_bus_count.append(b)
+                    this_unstable_buses.append(unstable_bus(us_bus.us_id, t_buses[0][0], us_bus.people, us_bus.stable_count, us_bus.routes, us_bus.line_num, us_bus.direction, us_bus.track+ [[timestamp, t_buses[0][0]]]))
 
-    t_coincide_bus = []    #暂时存放满足要求的稳定状态
-    t_coincide_new_bus = []    #暂时存放合并以后的稳定状态
-    flag = [0 for i in range(len(this_stable_buses))]
-    for i in range(len(this_stable_buses)):
-        if flag[i] == 0:
-            t = [id for id, count in this_stable_buses[i].coincide_bus_count if count == continuous_coincide_num]
-            if t:
-                num = [n for n, b in enumerate(this_stable_buses) if b.s_id in t]
-                num = num + [i]
-                for j in num:
-                    flag[j] = 1
-                list(map(lambda x:t_coincide_bus.append(this_stable_buses[x]), num))
-                stable_max_id = ((stable_max_id/2)+1)*2
-                coincide_people = []
-                t_routes = []
-                for j in num:
-                    coincide_people += this_stable_buses[j].people
-                    t_routes += this_stable_buses[j].routes
-                t_routes = list(set(t_routes))
-                t_coincide_new_bus.append(stable_bus(stable_max_id, this_stable_buses[i].location, coincide_people, [], t_routes, this_stable_buses[i].line_num, this_stable_buses[i].direction))
-    '''删掉原来的，加入新合并的'''
-    list(map(lambda x:this_stable_buses.remove(x), t_coincide_bus))
-    list(map(lambda x:this_stable_buses.append(x), t_coincide_new_bus))
+        t_undetermined = [[pid, location, arround_buses] for pid, location in people_location for pid2, arround_buses in undetermined if pid == pid2]
+        for u_determine in t_undetermined:
+            '''处理待定集合，附近只有一个稳定状态或非稳定状态则加入'''
+            t_stable1 = [stable for stable in itertools.chain(this_stable_buses,this_unstable_buses) if stable.s_id in u_determine[2]]
+            t_stable2 = [stable for stable in t_stable1 if is_in_cluster(u_determine[1], stable.location, precision)]
+            if len(t_stable2) > 1:
+                '''多于一个，仍是待定状态，更新t_undetermined'''
+                this_undetermined.append([u_determine[0], [bus.s_id for bus in t_stable2]])
+                people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
+            elif len(t_stable2) == 1:
+                '''附近只有一个稳定状态或非稳定状态，则加入'''
+                for t_stable_bus in this_stable_buses:
+                    if t_stable2[0].s_id == t_stable_bus.s_id:
+                        t_stable_bus.people.append(u_determine[0])
+                        break
+                for t_unstable_bus in this_unstable_buses:
+                    if t_stable2[0].s_id == t_unstable_bus.s_id:
+                        t_unstable_bus.people.append(u_determine[0])
+                        break
+                people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
+            elif len(t_stable2) == 0:
+                '''附近没有稳定状态，则看作普通新上车的用户'''
+                pass
 
-    for us_bus in unstable_buses:
-        '''对不稳定的状态重新聚类'''
-        to_cluster = [[pid, location] for pid, location in people_location if pid in us_bus.people]
-        list(map(lambda x:people_location.remove(x), to_cluster))
-        t_cluster_points, t_cluster_center, t_buses = cluster(to_cluster, precision+20)
-        if len(t_buses) > 1:
-            '''不稳定状态分裂仍然是不稳定状态'''
-            for bus in t_buses:
-                unstable_max_id = (((unstable_max_id+1)/2))*2+1
-                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1], 0, [], us_bus.line_num, us_bus.direction))
-        elif len(t_buses) == 1:
-            '''没有分裂则计数加1，满足要求则转换为稳定状态'''
-            us_bus.stable_count += 1
-            if us_bus.stable_count == continuous_stable_num:
-                stable_max_id = ((stable_max_id/2)+1)*2
-                this_stable_buses.append(stable_bus(stable_max_id, t_buses[0][0], us_bus.people, [], us_bus.routes, us_bus.line_num, us_bus.direction))
+        t_people = []    #保存处理过的用户
+        for people in people_location:
+            '''处理剩下的用户，即新上车的用户'''
+            t_stables = [t_stable for t_stable in itertools.chain(this_stable_buses, this_unstable_buses) if is_in_cluster(people[1], t_stable.location, precision+20)]
+            if len(t_stables) > 1:
+                '''附近多于1个状态，进入待定'''
+                this_undetermined.append([people[0], [t_stable.s_id for t_stable in t_stables]])
+                t_people.append(people)
+            elif len(t_stables) == 1:
+                '''附近只有一个状态,加入'''
+                for t_stable in itertools.chain(this_stable_buses, this_unstable_buses):
+                    if t_stable.s_id == t_stables[0].s_id:
+                        t_stable.people.append(people[0])
+                        t_people.append(people)
+                        break
             else:
-                this_unstable_buses.append(unstable_bus(us_bus.us_id, t_buses[0][0], us_bus.people, us_bus.stable_count, us_bus.routes, us_bus.line_num, us_bus.direction))
+                '''附近没有稳定状态,看是否在某个不稳定状态中'''
+                # for us_bus in this_unstable_buses:
+                #     if is_in_cluster(people[1], us_bus.location, precision):
+                #         '''在不稳定状态中，则加入'''
+                #         us_bus.people.append(people[0])
+                #         t_people.append(people)
+                #         break
 
-    t_undetermined = [[pid, location, arround_buses] for pid, location in people_location for pid2, arround_buses in undetermined if pid == pid2]
-    for u_determine in t_undetermined:
-        '''处理待定集合，附近只有一个稳定状态或非稳定状态则加入'''
-        t_stable1 = [stable for stable in itertools.chain(this_stable_buses,this_unstable_buses) if stable.s_id in u_determine[2]]
-        t_stable2 = [stable for stable in t_stable1 if is_in_cluster(u_determine[1], stable.location, precision)]
-        if len(t_stable2) > 1:
-            '''多于一个，仍是待定状态，更新t_undetermined'''
-            this_undetermined.append([u_determine[0], [bus.s_id for bus in t_stable2]])
-            people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
-        elif len(t_stable2) == 1:
-            '''附近只有一个稳定状态或非稳定状态，则加入'''
-            for t_stable_bus in this_stable_buses:
-                if t_stable2[0].s_id == t_stable_bus.s_id:
-                    t_stable_bus.people.append(u_determine[0])
-                    break
-            for t_unstable_bus in this_unstable_buses:
-                if t_stable2[0].s_id == t_unstable_bus.s_id:
-                    t_unstable_bus.people.append(u_determine[0])
-                    break
-            people_location.remove([u_determine[0], u_determine[1]])    #在全集中删除该用户
-        elif len(t_stable2) == 0:
-            '''附近没有稳定状态，则看作普通新上车的用户'''
-            pass
+        list(map(lambda x:people_location.remove(x), t_people))    #处理过的用户都删掉
 
-    t_people = []    #保存处理过的用户
-    for people in people_location:
-        '''处理剩下的用户，即新上车的用户'''
-        t_stables = [t_stable for t_stable in itertools.chain(this_stable_buses, this_unstable_buses) if is_in_cluster(people[1], t_stable.location, precision+20)]
-        if len(t_stables) > 1:
-            '''附近多于1个状态，进入待定'''
-            this_undetermined.append([people[0], [t_stable.s_id for t_stable in t_stables]])
-            t_people.append(people)
-        elif len(t_stables) == 1:
-            '''附近只有一个状态,加入'''
-            for t_stable in itertools.chain(this_stable_buses, this_unstable_buses):
-                if t_stable.s_id == t_stables[0].s_id:
-                    t_stable.people.append(people[0])
-                    t_people.append(people)
-                    break
-        else:
-            '''附近没有稳定状态,看是否在某个不稳定状态中'''
-            # for us_bus in this_unstable_buses:
-            #     if is_in_cluster(people[1], us_bus.location, precision):
-            #         '''在不稳定状态中，则加入'''
-            #         us_bus.people.append(people[0])
-            #         t_people.append(people)
-            #         break
+        '''最后剩下的用户整体调用聚类算法，所有结果都加入不稳定状态'''
+        t_cluster_points, t_cluster_center, t_buses = cluster(people_location, precision)
+        for bus in t_buses:
+            '''对每一个聚类结果，首先看是否能加入消失的公交车上，如果不能再转为不稳定状态'''
+            possilbe_bus = [d for d in disappeared if calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1])<= predict_bus_range]
+            if possilbe_bus:
+                dises = [calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1]) for d in possilbe_bus]
+                min_index = dises.index(min(dises))
+                stable_max_id = ((stable_max_id/2)+1)*2
+                this_stable_buses.append(stable_bus(stable_max_id, bus[0], bus[1], [], possilbe_bus[min_index].routes,
+                                                    possilbe_bus[min_index].line_num, possilbe_bus[min_index].direction,
+                                                    possilbe_bus[min_index]+[[timestamp,bus[0]]]))
+                disappeared.remove(possilbe_bus[min_index])
+            else:
+                unstable_max_id = (((unstable_max_id+1)/2))*2+1
+                this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1]))
 
-    list(map(lambda x:people_location.remove(x), t_people))    #处理过的用户都删掉
+        while stable_buses:
+            stable_buses.pop()
+        list(map(lambda x:stable_buses.append(x), this_stable_buses))
+        while unstable_buses:
+            unstable_buses.pop()
+        list(map(lambda x:unstable_buses.append(x), this_unstable_buses))
+        while undetermined:
+            undetermined.pop()
+        list(map(lambda x:undetermined.append(x), this_undetermined))
 
-    '''最后剩下的用户整体调用聚类算法，所有结果都加入不稳定状态'''
-    t_cluster_points, t_cluster_center, t_buses = cluster(people_location, precision)
-    for bus in t_buses:
-        '''对每一个聚类结果，首先看是否能加入消失的公交车上，如果不能再转为不稳定状态'''
-        possilbe_bus = [d for d in disappeared if calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1])<= predict_bus_range]
-        if possilbe_bus:
-            dises = [calDis_point2point(d.location[0], d.location[1], bus[0][0], bus[0][1]) for d in possilbe_bus]
-            min_index = dises.index(min(dises))
-            stable_max_id = ((stable_max_id/2)+1)*2
-            this_stable_buses.append(stable_bus(stable_max_id, bus[0], bus[1], [], possilbe_bus[min_index].routes, possilbe_bus[min_index].line_num, possilbe_bus[min_index].direction))
-            disappeared.remove(possilbe_bus[min_index])
-        else:
-            unstable_max_id = (((unstable_max_id+1)/2))*2+1
-            this_unstable_buses.append(unstable_bus(unstable_max_id, bus[0], bus[1]))
+        routeMatch(precision)
 
-    while stable_buses:
-        stable_buses.pop()
-    list(map(lambda x:stable_buses.append(x), this_stable_buses))
-    while unstable_buses:
-        unstable_buses.pop()
-    list(map(lambda x:unstable_buses.append(x), this_unstable_buses))
-    while undetermined:
-        undetermined.pop()
-    list(map(lambda x:undetermined.append(x), this_undetermined))
-
-    routeMatch(precision)
-
+#路线匹配
 def routeMatch(precision):
     """match route for each bus
     """
     #路线匹配
     for s_bus in itertools.chain(stable_buses, unstable_buses):
         # if len(s_bus.routes) != 1:
+        segmentids, routeid = searchRegion(s_bus.location[0], s_bus.location[1])
+        segmentids = segmentids.split(',')
+        dises = []
+        res = []
+        if segmentids != ['']:
+            for s_id in segmentids:
+                try:
+                    r = buslines[s_id]
+                except KeyError as k:
+                    print(k)
+                dis, projection_point = calDis_point2segment(s_bus.location[0], s_bus.location[1], r[1], r[2], r[3], r[4])
+                dises.append(dis)
+                res.append([dis, projection_point, r[5], r[0]])
+            #在所有的距离中找到小于精度的，然后将路线的集合作为可能匹配的路线
+            res = [p for p in res if p[0] <= precision]
+            if s_bus.routes:
+                possible_line = []
+                for i in s_bus.routes:
+                    possible_line += busroutes[i].split(',')
+                res =[p for p in res if str(p[3]) in possible_line]
+            route = [p[2] for p in res]
+            if route:
+                '''只有在精度范围内有路线时才进行线路匹配'''
+                routes = list(set((','.join(route)).split(',')))
+                if not s_bus.routes:
+                    s_bus.routes = routes
+                else:
+                    s_bus.routes = [x for x in s_bus.routes if x in routes]
+                    if not s_bus.routes:
+                        s_bus.routes = routes
+                #找到最短距离的线段，将投影点作为公交的位置
+                mindis = min([p[0] for p in res])
+                t = [(p[1], p[3]) for p in res if p[0] == mindis]
+                new_location = t[0][0]
+                new_line_num = str(t[0][1])
+                if s_bus.location != new_location:
+                    '''车辆位置发生变化时才会更新行驶方向'''
+                    if s_bus.line_num != '0':
+                        if s_bus.line_num == new_line_num:
+                            '''前后都在一条线段上'''
+                            r = buslines[s_bus.line_num]
+                            if calDis_point2point(new_location[0], new_location[1], r[1], r[2]) > calDis_point2point(new_location[0], new_location[1], r[3], r[4]):
+                                s_bus.direction = 1
+                            else:
+                                s_bus.direction = -1
+                        else:
+                            for i in s_bus.routes:
+                                bus_route = busroutes[i]
+                                bus_route = bus_route.split(',')
+                                if new_line_num in bus_route and s_bus.line_num in bus_route:
+                                    try:
+                                        num1 = bus_route.index(s_bus.line_num)
+                                    except ValueError as v:
+                                        print(v)
+                                    num2 = bus_route.index(new_line_num)
+                                    if num2 > num1:
+                                        p_num = num2-1
+                                    else:
+                                        p_num = num2+1
+                                    r1 = buslines[new_line_num]
+                                    r2 = buslines[bus_route[p_num]]
+                                    for k in (r2[1], r2[3]):
+                                        if r1[1] == k:
+                                            s_bus.direction = 1
+                                            break
+                                        if r1[3] == k:
+                                            s_bus.direction = -1
+                                            break
+                                    break
+                s_bus.location = new_location
+                s_bus.line_num = new_line_num
+
+#根据一个用户的位置信息，更新公交车的位置
+def update_bus_location_by_pid(pid, location, timestamp, precision):
+    s_bus = []
+    for bus in itertools.chain(stable_buses, unstable_buses):
+        if pid in bus.people:
+            s_bus = bus
+            break
+    if s_bus and timestamp > s_bus.track[len(s_bus.track)-1][0]:
+        '''如果该用户在车上，且时间戳比车上最后一个时间戳新，则更新车辆的位置'''
+        s_bus.location = location
         segmentids, routeid = searchRegion(s_bus.location[0], s_bus.location[1])
         segmentids = segmentids.split(',')
         dises = []

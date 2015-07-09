@@ -9,6 +9,7 @@ from math import pi
 import time
 from DataTransform import searchSegmentById, searchRouteLocation, readAllRegionInfo, readAllLineInfo, readAllRouteInfo
 from temp import maparea, buslines, busroutes
+from Simulate import *
 
 import csv
 
@@ -216,7 +217,7 @@ def getSimulateData(data_type):
     for i in range(len(data[0])):
         s = []
         for k in range(len(data)):
-            s.append([k+1,data[k][i][1]])
+            s.append([k+1,data[k][i][1], '20150623102807123456'])
         L.append(s)
     return L
 
@@ -231,142 +232,20 @@ if __name__ == '__main__':
     busroutes.update(readAllRouteInfo())
     print(busroutes)
 
-    #11111
-    #people_idle = people
-    # L=[]
-    # map_width = 20
-    # map_height = 20
-    # bus_num = 20
-    # bus_ids = sample(range(1, 1000), bus_num)
-    # bus_list = []
-    # for i in range(bus_num):
-    #     a = bus(bus_ids[i], (randrange(map_width), randrange(map_height)))
-    #     a.percent = []
-    #     a.on_bus(randrange(1, 20))
-    #     bus_list.append(a)
-    #     L = a.getGPS()+L
-    #
-    # dynamic_cluster2(L, precision=40)
-    # print_info()
-    # count = 0
-    #
-    # stable_count = []
-    # unstable_count = []
-    # stable_and_unstable = []
-    # for i in range(100):
-    #     count += 1
-    #     L = []
-    #     print("******************", i, "************************")
-    #     for a in bus_list:
-    #         if count % 5 == 0:
-    #             a.on_bus(randrange(1, 5))
-    #             a.off_bus(randrange(1, 5))
-    #         a.move(100, uniform(0, 2*pi))
-    #         L = a.getGPS() + L
-    #
-    #     dynamic_cluster2(L, precision=40)
-    #     print_info()
-    #     stable_count.append(len(stable_buses))
-    #     unstable_count.append(len(unstable_buses))
-    #     stable_and_unstable.append(len(stable_buses)+len(unstable_buses))
-    # # for bus in bus_list:
-    # #     plt.plot(bus.percent)
-    # # plt.ylim(0, 1)
-    #
-    # plt.plot(stable_count)
-    # plt.plot(unstable_count)
-    # plt.plot(stable_and_unstable)
-    # plt.show()
-
-    #222
-    # route = range(2, 51)
-    # r = buslines['1']
-    # a = bus(999, (r[1],r[2]))
-    # a.on_bus(20)
-    # b = bus(999, (r[1],r[2]))
-    # b.on_bus(20)
-    # a.setLocation((r[1], r[2]))
-    # b.setLocation((r[1], r[2]))
-    # L=[]
-    # for i in route:
-    #     r = buslines[str(i)]
-    #     # gps = [[1, [r[1], r[2]]]]
-    #     a.setLocation((r[1], r[2]))
-    #     b.setLocation((r[1], r[2]))
-    #     num = randrange(1, 5)
-    #     print('上车人数：',num,'**********')
-    #     a.on_bus(num)
-    #     b.on_bus(num)
-    #     num = randrange(1, 5)
-    #     print('下车人数：',num,'**********')
-    #     a.off_bus(num)
-    #     b.off_bus(num)
-    #     print('a车', a.getPassengerID())
-    #     print('b车', b.getPassengerID())
-    #     print('*****车上人数为',len(a.getPassengerID()),'***************')
-    #     L = a.getGPS() + b.getGPS()
-    #     dynamic_cluster2(L, 40)
-    #     print_info()
-    #     print('**********大循环公交的位置************')
-    #     print(searchRouteLocation('1'))
-
-    #333333
-    # route = range(12, 17)
-    # r = buslines['11']
-    # a = bus(999, (r[1],r[2]))
-    # a.on_bus(5)
-    # for i in route:
-    #     r = buslines[str(i)]
-    #     a.setLocation((r[1], r[2]))
-    #     a.off_bus(1)
-    #     print('a车', a.getPassengerID())
-    #     print('*****车上人数为',len(a.getPassengerID()),'***************')
-    #     L = a.getGPS()
-    #     dynamic_cluster2(L, 40)
-    #     print_info()
-    #     print('**********大循环公交的位置************')
-    #     print(searchRouteLocation('1'))
-    #     time.sleep(1)
-    #
-    # route = range(18, 23)
-    # r = buslines['17']
-    # a.setLocation((r[1], r[2]))
-    # for i in route:
-    #     r = buslines[str(i)]
-    #     a.setLocation((r[1], r[2]))
-    #     a.on_bus(1)
-    #     print('a车', a.getPassengerID())
-    #     print('*****车上人数为',len(a.getPassengerID()),'***************')
-    #     L = a.getGPS()
-    #     dynamic_cluster2(L, 40)
-    #     print_info()
-    #     print('**********大循环公交的位置************')
-    #     print(searchRouteLocation('1'))
-
-    #444444
-    # p = [[id+1, (randrange(0, 3500), randrange(4500, 8066))] for id in range(10)]
-    # print(p)
-    #
-    # with open('1.csv',newline='') as csvfile:
-    #     reader = csv.reader(csvfile,delimiter=':', quotechar='|')
-    #     count =1
-    #     for row in reader:
-    #         print(count)
-    #         count+=1
-    #         a = row[0].split(',')
-    #         if a[19]!="":
-    #             location = a[20:18:-1]
-    #             location = [float(x) for x in location]
-    #             L = [[1, location]]
-    #             dynamic_cluster2(L, 40)
-    #             print_info()
-    #             print('**********大循环公交的位置************')
-    #             print(searchRouteLocation('1'))
-    # csvfile.close()
-
-
-    #55555
-    data = getSimulateData(3)
-    for L in data:
-        dynamic_cluster2(L, 40)
-        print_info()
+    a = SimulateBus(1, 0, 10, 10, 0)
+    # a.stop(30, 10)
+    # a.stop(40, 20)
+    a.generateData()
+    b = SimulateBus(1, 100, 10, 5, 100)
+    b.generateData()
+    s = simulate()
+    s.addSimulateBus(a)
+    s.addSimulateBus(b)
+    d = s.getNext()
+    while d != [-1]:
+        # print("random:",d[0])
+        # print("period:",d[1])
+        if d[1]:
+            dynamic_cluster2(d[1], 40)
+            print_info()
+        d=s.getNext()
